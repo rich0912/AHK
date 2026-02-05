@@ -5,12 +5,16 @@
 ; Stop with Ctrl+Alt+Q.
 
 intervalMs := 1000
+logPath := "C:\\Users\\YS\\Documents\\AutoHotkey\\int_repo\\AHK_Int_Red.csv"
+totals := Map()
 
 SoundBeep 1000, 120
 InitDisplay("Starting network monitor...")
 
 SetTimer ShowTraffic, intervalMs
 ShowTraffic()
+
+OnExit WriteTotals
 
 ^!q::ExitApp
 
@@ -21,18 +25,7 @@ ShowTraffic() {
         return
     }
 
-    lines := []
-    for item in data {
-        if (item.hasTraffic) {
-            lines.Push(item.name ": " item.down " down / " item.up " up")
-        }
-    }
-
-    if (lines.Length = 0) {
-        ShowText("No active traffic")
-        return
-    }
-
+    AccumulateTotals(data)
     ShowLines(data)
 }
 
@@ -59,6 +52,37 @@ GetNetStats() {
         results.Push({ name: "WMI error", down: e.Message, up: "" })
     }
     return results
+}
+
+AccumulateTotals(items) {
+    global totals, intervalMs
+    seconds := intervalMs / 1000.0
+    for item in items {
+        if !totals.Has(item.name) {
+            totals[item.name] := { down: 0.0, up: 0.0 }
+        }
+        totals[item.name].down += item.downBps * seconds
+        totals[item.name].up += item.upBps * seconds
+    }
+}
+
+WriteTotals(ExitReason := "", ExitCode := 0) {
+    global totals, logPath
+
+    dir := RegExReplace(logPath, "\\[^\\]+$")
+    if !DirExist(dir) {
+        DirCreate(dir)
+    }
+
+    lines := []
+    lines.Push("Adapter,DownBytes,UpBytes")
+    for name, v in totals {
+        lines.Push('"' name '",' Round(v.down) "," Round(v.up))
+    }
+    if FileExist(logPath) {
+        FileDelete logPath
+    }
+    FileAppend JoinLines(lines), logPath, "UTF-8"
 }
 
 JoinLines(arr) {
